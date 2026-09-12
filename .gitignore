@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Large Model Files (Users should download these automatically via the script, or we ignore them)
+hand_landmarker.task
+*.tflite
+*.task
+
+# Logs and databases
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
