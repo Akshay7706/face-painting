@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Canvas</title>
-    <!-- Import Google Font -->
+    <title>Neon Canvas JS</title>
+    <!-- Import Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Tasks Vision -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js" crossorigin="anonymous"></script>
     
     <style>
         :root {
@@ -36,7 +39,6 @@
             position: relative;
         }
 
-        /* Overlay shadow to focus center */
         body::before {
             content: '';
             position: absolute;
@@ -51,18 +53,9 @@
             letter-spacing: 4px;
             text-transform: uppercase;
             font-size: 3rem;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             color: #fff;
-            text-shadow: 
-                0 0 5px #fff,
-                0 0 20px var(--neon-cyan),
-                0 0 40px var(--neon-cyan);
-            animation: flicker 4s infinite;
-        }
-
-        @keyframes flicker {
-            0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 1; }
-            20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.4; }
+            text-shadow: 0 0 5px #fff, 0 0 20px var(--neon-cyan), 0 0 40px var(--neon-cyan);
         }
 
         .main-container {
@@ -71,24 +64,15 @@
             align-items: flex-start;
         }
 
-        /* Cyberpunk Panel */
         .cyber-panel {
             background: var(--panel-bg);
             border: 2px solid var(--neon-cyan);
-            box-shadow: 
-                0 0 15px rgba(0, 229, 255, 0.2),
-                inset 0 0 20px rgba(0, 229, 255, 0.1);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.2), inset 0 0 20px rgba(0, 229, 255, 0.1);
             position: relative;
             padding: 20px;
-            /* Angled corners using clip-path */
-            clip-path: polygon(
-                20px 0, 100% 0, 
-                100% calc(100% - 20px), calc(100% - 20px) 100%, 
-                0 100%, 0 20px
-            );
+            clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
         }
 
-        /* Glitch decorations */
         .cyber-panel::after {
             content: '';
             position: absolute;
@@ -99,29 +83,39 @@
         }
 
         .video-container {
-            overflow: hidden;
-            border: 1px solid var(--neon-cyan);
             position: relative;
+            width: 640px;
+            height: 480px;
+            border: 1px solid var(--neon-cyan);
+            background: #000;
+        }
+        
+        video {
+            display: none; /* We use canvas to draw the video */
         }
 
-        .video-container img {
-            display: block;
-            width: 100%;
-            height: auto;
-            filter: contrast(1.1) brightness(0.9);
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1); /* Mirror */
         }
 
-        /* Scanline effect over video */
+        #output_canvas { z-index: 1; } /* Video + landmarks */
+        #drawing_canvas { z-index: 2; pointer-events: none; } /* User Drawing */
+        #cursor_canvas { z-index: 3; pointer-events: none; } /* Neon cursor */
+
         .video-container::after {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            background-size: 100% 4px, 3px 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
             pointer-events: none;
+            z-index: 10;
         }
 
-        /* HTML HUD Layout */
         .hud-sidebar {
             display: flex;
             flex-direction: column;
@@ -133,15 +127,12 @@
             background: rgba(0, 229, 255, 0.05);
             border-left: 4px solid var(--neon-cyan);
             padding: 15px 20px;
-            position: relative;
             transition: all 0.2s;
         }
-
-        .stat-card:hover {
-            background: rgba(0, 229, 255, 0.15);
+        
+        .stat-card.active-tool {
             border-left-color: var(--neon-pink);
-            box-shadow: 5px 0 15px rgba(255, 0, 255, 0.2);
-            transform: translateX(5px);
+            background: rgba(255, 0, 255, 0.15);
         }
 
         .stat-label {
@@ -162,80 +153,75 @@
         .stat-value.active-gesture {
             color: var(--neon-pink);
             text-shadow: 0 0 10px var(--neon-pink);
-            animation: pulse 1s infinite;
         }
 
-        @keyframes pulse {
-            0% { text-shadow: 0 0 10px var(--neon-pink); }
-            50% { text-shadow: 0 0 25px var(--neon-pink), 0 0 5px #fff; }
-            100% { text-shadow: 0 0 10px var(--neon-pink); }
-        }
-        
-        .color-preview {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #fff;
-            box-shadow: 0 0 10px #fff;
-            vertical-align: middle;
-            margin-right: 15px;
-            transform: rotate(45deg); /* Diamond shape */
-        }
-
-        /* Controls */
         .controls {
             margin-top: 25px;
             display: flex;
-            gap: 15px;
+            gap: 10px;
             justify-content: center;
+            flex-wrap: wrap;
         }
 
         button {
             background: transparent;
             color: var(--neon-cyan);
             border: 1px solid var(--neon-cyan);
-            padding: 12px 25px;
+            padding: 10px 15px;
             cursor: pointer;
             font-family: 'Share Tech Mono', monospace;
-            font-size: 1.1rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            font-size: 1rem;
+            letter-spacing: 1px;
             position: relative;
-            overflow: hidden;
             transition: all 0.2s;
-            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
         }
 
-        button:hover {
+        button:hover, button.active {
             background: var(--neon-cyan);
             color: #000;
-            box-shadow: 0 0 20px var(--neon-cyan);
+            box-shadow: 0 0 15px var(--neon-cyan);
         }
 
-        button:active {
-            transform: scale(0.95);
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--neon-cyan);
         }
+
+        input[type=color] {
+            border: none;
+            width: 50px;
+            height: 50px;
+            background: transparent;
+            cursor: pointer;
+        }
+
     </style>
 </head>
 <body>
 
-    <h1>NEON_CANVAS_V1</h1>
+    <h1>NEON_CANVAS_WEB</h1>
     
-    <div class="main-container">
-        <!-- Video Stream wrapped in Cyberpunk Panel -->
-        <div class="cyber-panel" style="padding-bottom: 30px;">
+    <div id="loading" style="font-size: 1.5rem; color: var(--neon-pink); margin-bottom: 20px;">
+        INITIALIZING NEURAL LINK (Loading AI Model)...
+    </div>
+
+    <div class="main-container" style="display: none;" id="main_ui">
+        <div class="cyber-panel">
             <div class="video-container">
-                <img src="/video_feed" alt="SYS.STREAM_OFFLINE">
+                <video id="webcam" autoplay playsinline></video>
+                <canvas id="output_canvas" width="640" height="480"></canvas>
+                <canvas id="drawing_canvas" width="640" height="480"></canvas>
+                <canvas id="cursor_canvas" width="640" height="480"></canvas>
             </div>
             
             <div class="controls">
-                <button onclick="sendCommand('/toggle_camera')">SYS.TOGGLE_BG</button>
-                <button onclick="sendCommand('/clear_canvas')">SYS.WIPE_MEM</button>
-                <button onclick="sendCommand('/switch_camera')">SYS.SWITCH_CAM</button>
+                <button onclick="setTool('SOLID')" id="btn_SOLID" class="active">SOLID</button>
+                <button onclick="setTool('ERASER')" id="btn_ERASER">ERASER</button>
+                <button onclick="clearCanvas()">CLEAR</button>
             </div>
         </div>
 
-        <!-- HTML HUD Sidebar -->
         <div class="hud-sidebar cyber-panel">
             <div class="stat-card">
                 <div class="stat-label">Sensor.Gesture</div>
@@ -249,58 +235,189 @@
             
             <div class="stat-card">
                 <div class="stat-label">Module.Radius</div>
+                <input type="range" id="brush_size" min="2" max="50" value="10" oninput="updateSize(this.value)">
                 <div class="stat-value"><span id="val-size">10</span>px</div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-label">Output.Color</div>
                 <div style="display: flex; align-items: center; margin-top: 8px;">
-                    <div class="color-preview" id="val-color"></div>
-                    <div class="stat-value" style="font-size: 1.2rem; font-family: 'Outfit', sans-serif;" id="val-color-text">RGB</div>
+                    <input type="color" id="color_picker" value="#00e5ff" onchange="updateColor(this.value)">
                 </div>
-            </div>
-            
-            <div class="stat-card" style="border:none; border-top: 1px dashed rgba(0,229,255,0.3); padding-top:20px; background:transparent;">
-                <div class="stat-label">Hardware.Node</div>
-                <div class="stat-value" style="font-size: 1rem; color:#666;" id="val-cam">INDEX 0</div>
             </div>
         </div>
     </div>
 
-    <script>
-        function sendCommand(endpoint) {
-            fetch(endpoint, { method: 'POST' })
-            .catch(error => console.error('Error:', error));
+    <script type="module">
+        import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+        const video = document.getElementById("webcam");
+        const outCanvas = document.getElementById("output_canvas");
+        const outCtx = outCanvas.getContext("2d");
+        const drawCanvas = document.getElementById("drawing_canvas");
+        const drawCtx = drawCanvas.getContext("2d");
+        const cursorCanvas = document.getElementById("cursor_canvas");
+        const cursorCtx = cursorCanvas.getContext("2d");
+        
+        let handLandmarker = undefined;
+        let runningMode = "VIDEO";
+        let lastVideoTime = -1;
+        
+        let activeTool = "SOLID";
+        let brushSize = 10;
+        let brushColor = "#00e5ff";
+        
+        let isDrawing = false;
+        let lastPx = null;
+        let lastPy = null;
+
+        window.setTool = function(tool) {
+            activeTool = tool;
+            document.getElementById('val-tool').textContent = tool;
+            document.getElementById('btn_SOLID').classList.remove('active');
+            document.getElementById('btn_ERASER').classList.remove('active');
+            document.getElementById('btn_' + tool).classList.add('active');
+        };
+
+        window.updateSize = function(val) {
+            brushSize = parseInt(val);
+            document.getElementById('val-size').textContent = brushSize;
+        };
+        
+        window.updateColor = function(val) {
+            brushColor = val;
+        };
+        
+        window.clearCanvas = function() {
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        };
+
+        // Initialize MediaPipe
+        async function createHandLandmarker() {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                    delegate: "GPU"
+                },
+                runningMode: runningMode,
+                numHands: 1,
+                minHandDetectionConfidence: 0.5,
+                minHandPresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("main_ui").style.display = "flex";
+            startCamera();
+        }
+        createHandLandmarker();
+
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
+                video.srcObject = stream;
+                video.addEventListener("loadeddata", predictWebcam);
+            });
         }
 
-        setInterval(() => {
-            fetch('/state')
-                .then(res => res.json())
-                .then(data => {
-                    const gestureEl = document.getElementById('val-gesture');
-                    gestureEl.textContent = data.gesture;
-                    if(data.gesture === "PINCH" || data.gesture === "POINTING") {
-                        gestureEl.classList.add("active-gesture");
+        function getDistance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        async function predictWebcam() {
+            outCtx.save();
+            outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+            // Draw video to output canvas (it's mirrored via CSS)
+            outCtx.drawImage(video, 0, 0, outCanvas.width, outCanvas.height);
+            
+            cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                
+                const results = handLandmarker.detectForVideo(video, performance.now());
+                
+                let gestureStr = "IDLE";
+                document.getElementById('val-gesture').classList.remove('active-gesture');
+                
+                if (results.landmarks && results.landmarks.length > 0) {
+                    const landmarks = results.landmarks[0];
+                    
+                    const indexTip = landmarks[8];
+                    const thumbTip = landmarks[4];
+                    
+                    // Coordinates map to canvas width/height
+                    const px = indexTip.x * outCanvas.width;
+                    const py = indexTip.y * outCanvas.height;
+                    
+                    const dist = getDistance(indexTip, thumbTip);
+                    const isPinching = dist < 0.05;
+                    
+                    // Draw Cursor
+                    cursorCtx.beginPath();
+                    cursorCtx.arc(px, py, brushSize, 0, 2 * Math.PI);
+                    cursorCtx.strokeStyle = "#fff";
+                    cursorCtx.lineWidth = 2;
+                    cursorCtx.stroke();
+                    
+                    if (isPinching) {
+                        gestureStr = "PINCH (DRAWING)";
+                        document.getElementById('val-gesture').classList.add('active-gesture');
+                        
+                        cursorCtx.beginPath();
+                        cursorCtx.arc(px, py, 6, 0, 2 * Math.PI);
+                        cursorCtx.fillStyle = activeTool === "ERASER" ? "#fff" : brushColor;
+                        cursorCtx.fill();
+                        
+                        if (!isDrawing) {
+                            isDrawing = true;
+                            lastPx = px;
+                            lastPy = py;
+                        }
+                        
+                        // Draw on layer
+                        drawCtx.beginPath();
+                        drawCtx.lineCap = "round";
+                        drawCtx.lineJoin = "round";
+                        drawCtx.lineWidth = brushSize * 2;
+                        
+                        if (activeTool === "ERASER") {
+                            drawCtx.globalCompositeOperation = "destination-out";
+                        } else {
+                            drawCtx.globalCompositeOperation = "source-over";
+                            drawCtx.strokeStyle = brushColor;
+                        }
+                        
+                        drawCtx.moveTo(lastPx, lastPy);
+                        drawCtx.lineTo(px, py);
+                        drawCtx.stroke();
+                        
+                        lastPx = px;
+                        lastPy = py;
                     } else {
-                        gestureEl.classList.remove("active-gesture");
+                        isDrawing = false;
+                        lastPx = null;
+                        lastPy = null;
+                        
+                        cursorCtx.beginPath();
+                        cursorCtx.arc(px, py, 3, 0, 2 * Math.PI);
+                        cursorCtx.fillStyle = "#aaa";
+                        cursorCtx.fill();
                     }
+                } else {
+                    isDrawing = false;
+                    lastPx = null;
+                    lastPy = null;
+                }
+                
+                document.getElementById('val-gesture').textContent = gestureStr;
+            }
+            outCtx.restore();
 
-                    document.getElementById('val-tool').textContent = data.tool;
-                    document.getElementById('val-size').textContent = data.size;
-
-                    const b = data.color[0];
-                    const g = data.color[1];
-                    const r = data.color[2];
-                    const colorStr = `rgb(${r}, ${g}, ${b})`;
-                    document.getElementById('val-color').style.backgroundColor = colorStr;
-                    document.getElementById('val-color').style.boxShadow = `0 0 15px ${colorStr}`;
-                    document.getElementById('val-color-text').textContent = `${r}, ${g}, ${b}`;
-
-                    document.getElementById('val-cam').textContent = "INDEX " + data.cam_index;
-                })
-                .catch(err => console.error(err));
-        }, 100); 
+            window.requestAnimationFrame(predictWebcam);
+        }
     </script>
-
 </body>
 </html>
